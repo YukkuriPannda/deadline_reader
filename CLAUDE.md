@@ -1,176 +1,164 @@
 # CLAUDE.md — deadline_reader
 
-This file provides guidance for AI coding assistants (Claude Code and similar tools) working in this repository. Keep it updated as the project evolves.
+This file provides guidance for AI coding assistants (Claude Code and similar tools) working in this repository.
 
 ---
 
 ## Project Overview
 
-**deadline_reader** is a tool for reading, parsing, and tracking deadlines. The repository is currently in its initial state — no source files have been committed yet.
+**deadline_reader** is a Discord bot that:
+1. Monitors specified Discord channels for image attachments
+2. Sends the image to the Claude API (vision) to extract event/deadline information
+3. Adds the extracted event to Google Calendar automatically
 
-When code is added, update the relevant sections of this file to reflect the actual structure, stack, and conventions.
-
----
-
-## Repository State
-
-| Item | Status |
-|------|--------|
-| Source code | Not yet committed |
-| Tests | Not yet added |
-| CI/CD | Not yet configured |
-| Dependencies | Not yet defined |
+**Stack**: Node.js · Discord.js v14 · Anthropic SDK · Google Calendar API (googleapis)
 
 ---
 
-## Development Branch
-
-All work should be done on feature branches. The current documentation branch is:
-
-```
-claude/add-claude-documentation-V148R
-```
-
-Branch naming convention:
-- Features: `feature/<short-description>`
-- Bug fixes: `fix/<short-description>`
-- Claude Code tasks: `claude/<description>-<id>`
-
----
-
-## Git Workflow
-
-```bash
-# Start a new feature
-git checkout -b feature/my-feature
-
-# Stage specific files (avoid git add -A to prevent accidentally staging secrets)
-git add path/to/file.py
-
-# Commit with a descriptive message
-git commit -m "Add deadline parser for ISO 8601 format"
-
-# Push with upstream tracking
-git push -u origin feature/my-feature
-```
-
-**Rules:**
-- Never force-push to `main`/`master`
-- Never skip pre-commit hooks (`--no-verify`)
-- Prefer small, focused commits over large ones
-- Do not commit secrets, `.env` files, or credentials
-
----
-
-## Project Structure (Template)
-
-Once source files exist, the expected layout will be documented here. A typical structure for a Python-based deadline_reader might look like:
+## Repository Structure
 
 ```
 deadline_reader/
-├── CLAUDE.md               # This file
-├── README.md               # User-facing documentation
-├── pyproject.toml          # Project metadata & dependencies (or requirements.txt)
+├── CLAUDE.md
+├── package.json
+├── .env.example           # Required environment variable template
+├── .gitignore
 ├── src/
-│   └── deadline_reader/
-│       ├── __init__.py
-│       ├── parser.py       # Deadline parsing logic
-│       ├── reader.py       # File/source reading
-│       └── models.py       # Data models for deadlines
-└── tests/
-    ├── test_parser.py
-    └── test_reader.py
+│   ├── index.js           # Entry point: Discord bot setup and message handler
+│   ├── extractor.js       # Claude Vision API — extracts event data from images
+│   └── calendar.js        # Google Calendar API — creates calendar events
+└── scripts/
+    └── authorize.js       # One-time OAuth2 setup to obtain GOOGLE_REFRESH_TOKEN
 ```
-
-Update this section to reflect the actual layout once files are added.
-
----
-
-## Commands
-
-Populate these once the project is bootstrapped:
-
-```bash
-# Install dependencies
-# <to be filled in>
-
-# Run the application
-# <to be filled in>
-
-# Run tests
-# <to be filled in>
-
-# Lint / format
-# <to be filled in>
-```
-
----
-
-## Code Conventions
-
-Until a linter/formatter config is committed, follow these defaults:
-
-- **Python**: PEP 8, formatted with `ruff` or `black`, type hints preferred
-- **JavaScript/TypeScript**: ESLint + Prettier, strict TypeScript if applicable
-- **Line length**: 100 characters max
-- **Imports**: group standard library → third-party → local, separated by blank lines
-- **Tests**: co-locate in a `tests/` directory, one test file per source module
-
----
-
-## AI Assistant Guidelines
-
-When working in this repository:
-
-1. **Read before editing** — always read a file before modifying it.
-2. **Minimal changes** — make only what was asked; don't refactor surrounding code.
-3. **No speculative abstractions** — don't add helpers, utilities, or config options for hypothetical future use.
-4. **No unnecessary comments** — only add comments where the logic is non-obvious.
-5. **Security** — avoid command injection, SQL injection, XSS, and other OWASP top-10 issues.
-6. **Test coverage** — when adding functionality, add or update corresponding tests.
-7. **Confirm before destructive actions** — deleting files, resetting branches, or modifying CI requires user confirmation.
-8. **Update this file** — if you add new tooling, change the project structure, or establish new conventions, update the relevant section of CLAUDE.md.
 
 ---
 
 ## Environment Variables
 
-Document required environment variables here as they are introduced. Example format:
+Copy `.env.example` to `.env` and fill in the values.
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `DEADLINE_DB_PATH` | No | Path to local deadline database (default: `~/.deadline_reader/db.json`) |
-
-Store secrets in a `.env` file (gitignored) and document the keys (not values) here.
+| `DISCORD_TOKEN` | Yes | Discord bot token |
+| `DISCORD_CHANNEL_IDS` | No | Comma-separated channel IDs to watch. Empty = all channels |
+| `ANTHROPIC_API_KEY` | Yes | Anthropic API key |
+| `GOOGLE_CLIENT_ID` | Yes | Google OAuth2 client ID |
+| `GOOGLE_CLIENT_SECRET` | Yes | Google OAuth2 client secret |
+| `GOOGLE_REFRESH_TOKEN` | Yes | Obtained by running `npm run authorize` |
+| `GOOGLE_CALENDAR_ID` | No | Calendar ID (default: `primary`) |
 
 ---
 
-## Testing
-
-Once a test framework is configured:
+## Commands
 
 ```bash
-# Run all tests
-pytest
+# Install dependencies
+npm install
 
-# Run with coverage
-pytest --cov=src/deadline_reader --cov-report=term-missing
+# First-time Google Calendar OAuth setup (run once)
+npm run authorize
 
-# Run a single file
-pytest tests/test_parser.py
+# Start the bot
+npm start
 ```
-
-Tests must pass before merging any PR.
 
 ---
 
-## CI/CD
+## Setup Guide
 
-CI configuration has not been added yet. When added (e.g., GitHub Actions), document the workflows here and note:
+### 1. Discord Bot
+1. Create a bot at https://discord.com/developers/applications
+2. Enable **Message Content Intent** under Bot settings
+3. Invite the bot with scopes: `bot` + permissions: `Read Messages`, `Send Messages`, `Add Reactions`
+4. Copy the bot token to `DISCORD_TOKEN`
 
-- Which branch triggers CI
-- How to read CI results
-- What must pass before merge
+### 2. Google Cloud Project
+1. Create a project at https://console.cloud.google.com
+2. Enable the **Google Calendar API**
+3. Create OAuth2 credentials (type: Web application)
+4. Add `http://localhost:3000` to Authorized redirect URIs
+5. Copy Client ID and Secret to `.env`
+6. Run `npm run authorize` to obtain `GOOGLE_REFRESH_TOKEN`
+
+### 3. Anthropic API
+1. Get an API key at https://console.anthropic.com
+2. Copy to `ANTHROPIC_API_KEY`
+
+---
+
+## Data Flow
+
+```
+Discord message (image attachment)
+  └─► src/index.js (MessageCreate handler)
+        └─► src/extractor.js (Claude claude-sonnet-4-6 vision)
+              └─► returns { title, date, startTime, endTime, location, description }
+                    └─► src/calendar.js (Google Calendar events.insert)
+                          └─► Discord reply with embed (event title, date, link)
+```
+
+### Claude Extraction Schema
+
+`extractor.js` prompts Claude to return JSON:
+```json
+{
+  "title": "string",
+  "date": "YYYY-MM-DD",
+  "startTime": "HH:MM | null",
+  "endTime": "HH:MM | null",
+  "location": "string | null",
+  "description": "string | null"
+}
+```
+If no event info is found, Claude returns `{"error": "..."}` and the bot replies with a friendly error.
+
+### Calendar Event Rules
+- If `startTime` is present → timed event (`dateTime`), end defaults to start + 1 hour if `endTime` is null
+- If `startTime` is null → all-day event (`date`)
+- Timezone: `Asia/Tokyo`
+
+---
+
+## Development Workflow
+
+### Git
+
+```bash
+# Branch naming
+feature/<short-description>      # new features
+fix/<short-description>          # bug fixes
+claude/<description>-<id>        # Claude Code tasks
+
+# Push with upstream tracking
+git push -u origin <branch-name>
+```
+
+**Rules:**
+- Never force-push `main`/`master`
+- Never skip pre-commit hooks (`--no-verify`)
+- Never commit `.env` or credentials
+
+---
+
+## Code Conventions
+
+- **Runtime**: Node.js ≥ 18
+- **Style**: CommonJS (`require`/`module.exports`)
+- **Line length**: 100 characters max
+- **No TypeScript**: plain JavaScript for simplicity
+- **Error handling**: catch and log errors; reply to the Discord message with a Japanese error message
+
+---
+
+## AI Assistant Guidelines
+
+1. **Read before editing** — always read a file before modifying it.
+2. **Minimal changes** — make only what was asked; don't refactor surrounding code.
+3. **No speculative abstractions** — don't add helpers or config for hypothetical future use.
+4. **Security** — never log API keys; avoid command injection.
+5. **Test coverage** — if tests are added later, one test file per source module in `tests/`.
+6. **Update this file** — if you change the structure, stack, or conventions, update CLAUDE.md.
+7. **Confirm before destructive actions** — deleting files or resetting branches requires user confirmation.
 
 ---
 
@@ -178,4 +166,4 @@ CI configuration has not been added yet. When added (e.g., GitHub Actions), docu
 
 | Date | Change |
 |------|--------|
-| 2026-04-10 | Initial CLAUDE.md created for empty repository |
+| 2026-04-10 | Initial implementation: Discord bot + Claude Vision + Google Calendar |
