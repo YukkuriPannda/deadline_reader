@@ -8,10 +8,10 @@ This file provides guidance for AI coding assistants (Claude Code and similar to
 
 **deadline_reader** is a Discord bot that:
 1. Monitors specified Discord channels for image attachments
-2. Sends the image to the Claude API (vision) to extract event/deadline information
+2. Sends the image to the Gemini API (vision) to extract event/deadline information
 3. Adds the extracted event to Google Calendar automatically
 
-**Stack**: Node.js · Discord.js v14 · Anthropic SDK · Google Calendar API (googleapis)
+**Stack**: Node.js · Discord.js v14 · Google Generative AI SDK · Google Calendar API (googleapis)
 
 ---
 
@@ -41,7 +41,7 @@ Copy `.env.example` to `.env` and fill in the values.
 |----------|----------|-------------|
 | `DISCORD_TOKEN` | Yes | Discord bot token |
 | `DISCORD_CHANNEL_IDS` | No | Comma-separated channel IDs to watch. Empty = all channels |
-| `ANTHROPIC_API_KEY` | Yes | Anthropic API key |
+| `GEMINI_API_KEY` | Yes | Google Gemini API key (取得: https://aistudio.google.com/apikey) |
 | `GOOGLE_CLIENT_ID` | Yes | Google OAuth2 client ID |
 | `GOOGLE_CLIENT_SECRET` | Yes | Google OAuth2 client secret |
 | `GOOGLE_REFRESH_TOKEN` | Yes | Obtained by running `npm run authorize` |
@@ -91,15 +91,15 @@ npm start
 ```
 Discord message (image attachment)
   └─► src/index.js (MessageCreate handler)
-        └─► src/extractor.js (Claude claude-sonnet-4-6 vision)
+        └─► src/extractor.js (Gemini gemini-2.0-flash vision)
               └─► returns { title, date, startTime, endTime, location, description }
                     └─► src/calendar.js (Google Calendar events.insert)
                           └─► Discord reply with embed (event title, date, link)
 ```
 
-### Claude Extraction Schema
+### Gemini Extraction Schema
 
-`extractor.js` prompts Claude to return JSON:
+`extractor.js` prompts Gemini to return JSON:
 ```json
 {
   "title": "string",
@@ -167,3 +167,4 @@ git push -u origin <branch-name>
 | Date | Change |
 |------|--------|
 | 2026-04-10 | Initial implementation: Discord bot + Claude Vision + Google Calendar |
+| 2026-04-14 | Switched Vision API from Claude (paid) to Gemini 2.0 Flash (free tier) |

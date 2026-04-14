@@ -1,7 +1,7 @@
-const Anthropic = require('@anthropic-ai/sdk');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 const axios = require('axios');
 
-const anthropic = new Anthropic();
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 const SUPPORTED_MEDIA_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
@@ -25,7 +25,7 @@ const EXTRACTION_PROMPT = `この画像からイベント・予定の情報を�
 - 年が明記されていない場合は現在の年を使用する`;
 
 /**
- * Claude Vision API を使って画像からイベント情報を抽出する。
+ * Gemini Vision API を使って画像からイベント情報を抽出する。
  * @param {string} imageUrl - Discord CDN の画像 URL
  * @param {string} contentType - MIME タイプ（例: "image/png"）
  * @returns {Promise<object|null>} 抽出したイベントデータ。予定情報がなければ null。
@@ -36,27 +36,16 @@ async function extractEventFromImage(imageUrl, contentType) {
   const imageResponse = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 15000 });
   const base64Data = Buffer.from(imageResponse.data).toString('base64');
 
-  const message = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 1024,
-    messages: [
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'image',
-            source: { type: 'base64', media_type: mediaType, data: base64Data },
-          },
-          { type: 'text', text: EXTRACTION_PROMPT },
-        ],
-      },
-    ],
-  });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  const result = await model.generateContent([
+    { inlineData: { mimeType: mediaType, data: base64Data } },
+    EXTRACTION_PROMPT,
+  ]);
 
-  const raw = message.content[0].text.trim();
+  const raw = result.response.text().trim();
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
-    throw new Error(`Claude から有効な JSON を受け取れませんでした: ${raw.slice(0, 200)}`);
+    throw new Error(`Gemini から有効な JSON を受け取れませんでした: ${raw.slice(0, 200)}`);
   }
 
   const data = JSON.parse(jsonMatch[0]);
