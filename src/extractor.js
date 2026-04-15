@@ -2,8 +2,10 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const axios = require('axios');
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
 const SUPPORTED_MEDIA_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+const MAX_RETRIES = 5;
 
 const EXTRACTION_PROMPT = `この画像からイベント・予定の情報を抽出し、以下のJSON形式のみで回答してください（他のテキストは一切含めないこと）：
 
@@ -25,6 +27,60 @@ const EXTRACTION_PROMPT = `この画像からイベント・予定の情報を�
 - 年が明記されていない場合は現在の年を使用する`;
 
 /**
+ * 429 / 503 エラー時に待機してリトライする汎用ラッパー。
+ * - 429: レスポンスの retryDelay を使用（なければ 60 秒）
+ * - 503: 10 秒スタートで最大 30 秒まで線形増加（10, 20, 30, 30, 30…）
+ * @param {() => Promise<T>} fn
+ * @returns {Promise<T>}
+ */
+async function callWithRetry(fn) {
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const status = err.status ?? 0;
+      const msg = err.message ?? '';
+
+      const is429 =
+        status === 429 ||
+        status === 'RESOURCE_EXHAUSTED' ||
+        msg.includes('429');
+
+      const is503 =
+        status === 503 ||
+        status === 'UNAVAILABLE' ||
+        msg.includes('503');
+
+      if ((!is429 && !is503) || attempt === MAX_RETRIES) throw err;
+
+      let waitMs;
+      if (is429) {
+        // retryDelay フィールドがあればそれを使用、なければ 60 秒
+        waitMs = 60000;
+        for (const detail of err.errorDetails ?? []) {
+          if (detail.retryDelay) {
+            const seconds = parseInt(detail.retryDelay, 10);
+            if (!isNaN(seconds) && seconds > 0) waitMs = seconds * 1000;
+            break;
+          }
+        }
+        console.warn(
+          `[Gemini] 429 Too Many Requests — ${waitMs / 1000}秒後にリトライ (${attempt + 1}/${MAX_RETRIES})`
+        );
+      } else {
+        // 503: 10s → 20s → 30s → 30s… （上限 30 秒）
+        waitMs = Math.min(10000 * (attempt + 1), 30000);
+        console.warn(
+          `[Gemini] 503 Service Unavailable — ${waitMs / 1000}秒後にリトライ (${attempt + 1}/${MAX_RETRIES})`
+        );
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+    }
+  }
+}
+
+/**
  * Gemini Vision API を使って画像からイベント情報を抽出する。
  * @param {string} imageUrl - Discord CDN の画像 URL
  * @param {string} contentType - MIME タイプ（例: "image/png"）
@@ -36,11 +92,12 @@ async function extractEventFromImage(imageUrl, contentType) {
   const imageResponse = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 15000 });
   const base64Data = Buffer.from(imageResponse.data).toString('base64');
 
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-  const result = await model.generateContent([
-    { inlineData: { mimeType: mediaType, data: base64Data } },
-    EXTRACTION_PROMPT,
-  ]);
+  const result = await callWithRetry(() =>
+    model.generateContent([
+      { inlineData: { mimeType: mediaType, data: base64Data } },
+      EXTRACTION_PROMPT,
+    ])
+  );
 
   const raw = result.response.text().trim();
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
@@ -48,7 +105,13 @@ async function extractEventFromImage(imageUrl, contentType) {
     throw new Error(`Gemini から有効な JSON を受け取れませんでした: ${raw.slice(0, 200)}`);
   }
 
-  const data = JSON.parse(jsonMatch[0]);
+  let data;
+  try {
+    data = JSON.parse(jsonMatch[0]);
+  } catch {
+    throw new Error(`JSON のパースに失敗しました: ${jsonMatch[0].slice(0, 200)}`);
+  }
+
   if (data.error) {
     return null;
   }
